@@ -1,57 +1,146 @@
-# [searxng2api](https://github.com/Skilemon/searxng2api)
-Convert the SearXNG service output from HTML to JSON for publicly available services on the internet.
+# SearXNG2API
 
-把在互联网上公开的 SearXNG 服务由 HTML 输出转为 Json 输出。
+将 SearXNG 公开实例的 HTML 搜索结果转为 JSON API 的 Cloudflare Worker 代理。
 
-## Features (特性)
-- Open-source, easy to deploy, and free. (开源，易于部署，且完全免费)
-- Proxy SearXNG Service. (代理 SearXNG 服务)
-  - [x] Select highly available port from the official public instances. (从官方实例从筛选高可用性的接口)
-  - [x] Proxy /config request. (代理 /config 请求)
-  - [x] Proxy /search request. (代理 /search 请求)
-  - [x] HTML to JSON. (HTML 输出转为 Json 输出)
+## Features
 
-<!-- ## Plan (开发计划) -->
-<!-- - [ ]  -->
+- 从官方实例列表自动筛选高可用实例
+- 代理搜索请求（`/search`），HTML → JSON 转换
+- 支持普通搜索（`general`）和图片搜索（`images`）
+- 支持 GET / POST 请求
+- 代理 `/config` 接口
+- 查看可用实例列表（`/list`）
+- 根路径返回使用说明（`/`）
+- 可设置 `BASE_URL` 固定代理某个实例
+- 可设置 `MORE_RESULT` 忽略搜索引擎参数以获取更多结果
 
-## Environment Variables (环境变量)
-```BASE_URL``` (optional/可选)
+## 环境变量
 
-Forcefully specify the address of the service to be proxied. (强行指定需要代理的服务地址)
+| 变量 | 说明 | 示例 |
+|------|------|------|
+| `BASE_URL` | 固定使用指定的 SearXNG 实例地址，不自动筛选 | `https://example.com` |
+| `MORE_RESULT` | 设为 `enable` 时忽略 `engines` 参数，返回所有引擎结果 | `enable` |
 
-> Example: ```https://example.com```
+## API
 
-```MORE_RESULT``` (optional/可选)
+### `GET /`
 
-Ignore the contents of the ```engines``` parameter for more search results. (忽略 ```engines``` 参数的内容以获取更多搜索结果)
+返回服务状态和使用说明。
 
-> Example: ```enable```
+```json
+{
+  "code": 200,
+  "message": "SearXNG2API Proxy 服务运行中",
+  "usage": {
+    "search": "/search?q=<关键词>&categories=general|images",
+    "config": "/config",
+    "list": "/list"
+  }
+}
+```
 
-## Updates (更新记录)
+### `GET/POST /search?q=<关键词>`
+
+代理搜索请求，返回 JSON 格式结果。
+
+**参数：**
+
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| `q` | 是 | 搜索关键词 |
+| `categories` | 否 | 搜索分类，`general`（默认）或 `images` |
+| `engines` | 否 | 指定搜索引擎（当 `MORE_RESULT=enable` 时忽略） |
+
+**响应格式：**
+
+```json
+{
+  "proxy": "https://实例地址/search?q=...",
+  "query": "搜索词",
+  "number_of_results": 0,
+  "results": [
+    {
+      "url": "...",
+      "title": "...",
+      "content": "...",
+      "publishedDate": null,
+      "engine": "...",
+      "category": "general|images"
+    }
+  ],
+  "answers": [],
+  "corrections": [],
+  "infoboxes": [],
+  "suggestions": [],
+  "unresponsive_engines": []
+}
+```
+
+### `GET /config`
+
+代理 SearXNG 实例的配置接口。
+
+### `GET /list`
+
+返回当前可用的实例列表。
+
+```json
+{
+  "code": 200,
+  "data": ["https://instance1.example.com", "https://instance2.example.com"]
+}
+```
+
+## 实例筛选规则
+
+从 [searx.space](https://searx.space/data/instances.json) 获取实例列表，按以下条件筛选：
+
+| 条件 | 阈值 |
+|------|------|
+| 网络类型 | `normal` |
+| 今日在线率 | ≥ 90% |
+| 初始化耗时中位数 | < 5 秒 |
+| 搜索耗时中位数 | < 5 秒 |
+| 初始化成功率 | ≥ 90% |
+| 搜索成功率 | ≥ 80% |
+
+额外规则：
+- 黑名单中的实例排除（已知异常实例）
+- 请求实例列表超时 10 秒自动放弃
+- 无可用实例时返回 500 JSON 错误响应
+
+## 部署
+
+1. 注册 [Cloudflare](https://dash.cloudflare.com/) 账号
+2. 进入 **Workers & Pages**
+3. 新建 Worker
+4. 将 `worker.js` 内容复制到编辑器中保存
+5. （可选）在面板中设置环境变量 `BASE_URL` 或 `MORE_RESULT`
+
+## 更新记录
+
 ### 2025-04-06
-1. Added ```MAX_RESULT``` variable to control whether the ```engines``` parameter is ignored. (新增 ```MAX_RESULT``` 变量来控制是否忽略 ```engines``` 参数)
-### 2025-04-05
-1. Changed the method of extracting data from regular matching to HTMLRewriter API. (提取数据的方法由正则匹配改为 HTMLRewriter API)
-2. Support for ```categories=images``` search. (支持 ```categories=images``` 的搜索)
-### 2025-04-04
-1. By ```BASE_URL``` variables to proxy the specified SearXNG service. (通过 ```BASE_URL``` 变量来代理指定的 SearXNG 服务)
-2. Obtain the list of available instances through the ```/list``` request. (通过 ```/list``` 请求获取可用的实例列表)
-### 2025-03-27
-1. Add blacklist list, exclude abnormal instance addresses. (新增黑名单列表，排除异常实例地址)
-2. Optimize the logic for judging service availability. (优化服务可用性的判断逻辑)
-### 2025-03-24
-1. Ignore the specified ```engines``` parameter. (忽略指定的 ```engines``` 参数)
-### 2025-03-23
-1. Re-evaluate the availability of SearXNG service from multiple aspects. (从多个方面重新判断 SearXNG 服务的可用性)
-### 2025-03-22
-1. First release. (第一版)
+- 新增 `MORE_RESULT` 环境变量，控制是否忽略 `engines` 参数
 
-## Quickstart (快速开始)
-### Use (直接使用)
-Enter the following address into Cherry Studio or other applications. (把以下地址填入 Cherry Studio 或其它应用中)
-- [https://searxng2api.svia.workers.dev](https://searxng2api.svia.workers.dev)
-### Deployment (自行部署)
-1. A Cloudflare account. (一个 Cloudflare 账户)
-2. Open your Cloudflare Workers page. (打开你的 Cloudflare Workers 页面)
-3. Create a new project. (新建一个项目)
-4. Copy the content of the ```worker.js``` file in this project to the one you just created and save it. (将本项目中 ```worker.js``` 文件的内容复制到你刚刚新建的项目里保存即可)
+### 2025-04-05
+- 解析方式由正则匹配改为 HTMLRewriter API
+- 支持 `categories=images` 图片搜索
+
+### 2025-04-04
+- 新增 `BASE_URL` 环境变量，可固定代理指定的 SearXNG 服务
+- 新增 `/list` 接口，返回可用实例列表
+
+### 2025-03-27
+- 新增黑名单列表，排除异常实例
+- 优化服务可用性判断逻辑
+
+### 2025-03-24
+- 支持忽略指定的 `engines` 参数
+
+### 2025-03-23
+- 放宽实例筛选条件（在线率 ≥90%、耗时 <5s、成功率 ≥80%）
+- 增加 AbortSignal.timeout 超时处理
+- fetch 异常时返回 JSON 错误而非直接崩溃
+
+### 2025-03-22
+- 初版发布
