@@ -109,7 +109,17 @@
 - 请求实例列表超时 10 秒自动放弃
 - 无可用实例时返回 500 JSON 错误响应
 
-## 部署
+## 快速开始
+
+### 直接使用
+
+把以下地址填入 Cherry Studio 或其他支持 OpenAI API 格式的应用中：
+
+```
+https://searxng2api.svia.workers.dev
+```
+
+### 自行部署
 
 1. 注册 [Cloudflare](https://dash.cloudflare.com/) 账号
 2. 进入 **Workers & Pages**
@@ -118,6 +128,16 @@
 5. （可选）在面板中设置环境变量 `BASE_URL` 或 `MORE_RESULT`
 
 ## 更新记录
+
+### 2025-04-xx（当前 fork）
+- 实例筛选条件放宽：在线率从 100% 降至 ≥90%，耗时从 <1s 放宽至 <5s，成功率从 100% 降至 ≥90% / ≥80%
+- 移除 `search_go` 引擎成功率要求（原要求 Google 搜索成功率 100%）
+- 实例列表请求增加 `AbortSignal.timeout(10000)` 超时保护和 try/catch 异常处理
+- 无可用实例时返回 JSON 500 错误信息，替代原来的 401 跳转
+- 新增 `/` 根路径，返回 API 使用说明 JSON
+- 搜索请求未指定 `categories` 时默认使用 `general`
+- HTML 解析时未知分类回退到 `generalParse`，替代原来的 401 拒绝
+- `parseUrl` 增加 HTTP/HTTPS 协议解析
 
 ### 2025-04-06
 - 新增 `MORE_RESULT` 环境变量，控制是否忽略 `engines` 参数
