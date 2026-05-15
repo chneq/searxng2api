@@ -129,7 +129,7 @@ https://searxng2api.svia.workers.dev
 
 ## 更新记录
 
-### 2025-04-xx（当前 fork）
+### 2026-05-16
 - 实例筛选条件放宽：在线率从 100% 降至 ≥90%，耗时从 <1s 放宽至 <5s，成功率从 100% 降至 ≥90% / ≥80%
 - 移除 `search_go` 引擎成功率要求（原要求 Google 搜索成功率 100%）
 - 实例列表请求增加 `AbortSignal.timeout(10000)` 超时保护和 try/catch 异常处理

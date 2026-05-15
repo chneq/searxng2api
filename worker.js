@@ -6,10 +6,16 @@ export default {
 
 // 定义一个异步函数来处理实例请求
 async function handleInstancesRequest() {
-  // 使用fetch API异步获取实例数据
-  const response = await fetch('https://searx.space/data/instances.json');
-  // 解析响应的JSON数据
-  const data = await response.json();
+  let data;
+  try {
+    // 使用fetch API异步获取实例数据
+    const response = await fetch('https://searx.space/data/instances.json', { signal: AbortSignal.timeout(10000) });
+    // 解析响应的JSON数据
+    data = await response.json();
+  } catch (error) {
+    console.error('获取实例列表失败:', error);
+    return null;
+  }
   // 黑名单实例列表（搜索异常的引擎）
   const BLACK_LIST = ['searx.be', 'darmarit.org', 'search.inetol.net', 's.mble.dk'];
   // 定义必须有效的搜索引擎列表
@@ -21,12 +27,11 @@ async function handleInstancesRequest() {
   const validInstances = Object.entries(data.instances)
     .filter(([url, instance]) => (
       instance.network_type === 'normal' && // 网络类型为'normal'
-      instance.uptime?.uptimeDay === 100 && // 今日在线率为100%
-      instance.timing?.initial?.all?.value < 1 && // 初始化耗中位数时小于 1 秒
-      instance.timing?.search?.all?.median < 1 && // 搜索耗时中位数小于 1 秒
-      instance.timing?.initial?.success_percentage === 100 && // 初始化成功率为100%
-      instance.timing?.search?.success_percentage === 100 && // 搜索成功率为100%
-      instance.timing?.search_go?.success_percentage === 100 && // Google搜索成功率为100%
+      instance.uptime?.uptimeDay >= 90 && // 今日在线率 >= 90%
+      instance.timing?.initial?.all?.value < 5 && // 初始化耗时中位数小于 5 秒
+      instance.timing?.search?.all?.median < 5 && // 搜索耗时中位数小于 5 秒
+      instance.timing?.initial?.success_percentage >= 90 && // 初始化成功率 >= 90%
+      instance.timing?.search?.success_percentage >= 80 && // 搜索成功率 >= 80%
       // 确保指定搜索引擎的可用性
       REQUIRED_ENGINES.every(engine => {
         const engineData = instance.engines?.[engine];
@@ -60,12 +65,19 @@ async function handleRequest(request, env) {
   if (typeof env.BASE_URL !== 'undefined' && env.BASE_URL) {
     instance = env.BASE_URL; // 使用用户配置的 BASE_URL
   } else {
+    // 检查是否有可用实例
+    if (!instances || instances.length === 0) {
+      return new Response(JSON.stringify({
+        code: 500,
+        error: '没有可用的 SearXNG 实例',
+        message: '当前没有满足条件的公开实例，请设置 BASE_URL 环境变量指定实例地址'
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      });
+    }
     // 从有效实例中随机选择一个
     instance = instances[Math.floor(Math.random() * instances.length)];
-    // 没找到合适的有效实例
-    if (instance === null) {
-      return createUnauthorizedResponse();
-    }
   }
 
   // 检查最后一个字符是否为'/'并去掉
@@ -93,8 +105,22 @@ async function handleRequest(request, env) {
         'Access-Control-Allow-Origin': '*'
       }
     });
+  } else if (url.pathname === '/') {
+    // 根路径返回使用说明
+    return new Response(JSON.stringify({
+      code: 200,
+      message: 'SearXNG2API Proxy 服务运行中',
+      usage: {
+        search: '/search?q=<关键词>&categories=general|images',
+        config: '/config',
+        list: '/list'
+      }
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+    });
   } else {
-    // 如果不是搜索请求，返回401未授权响应
+    // 如果不是已知路径，返回401未授权响应
     return createUnauthorizedResponse();
   }
 }
@@ -267,7 +293,8 @@ async function parseHtmlToJson(htmlContent, newUrl) {
   } else if (categories == 'images') {
     jsonResult.results = await imagesParse(htmlContent);
   } else {
-    return createUnauthorizedResponse();
+    // 默认使用 general 解析
+    jsonResult.results = await generalParse(htmlContent);
   }
 
   return jsonResult;
